@@ -28,7 +28,9 @@ app.post("/users", async (req, res) => {
     });
     res.json(user);
   } catch (error) {
-    res.status(500).json({ error: `Failed to create user: \n${error}` });
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(error);
+    res.status(500).json({ error: `Failed to create user\n${msg}` });
   }
 });
 
@@ -37,9 +39,9 @@ app.get("/users", async (req, res) => {
     const users = await prisma.user.findMany();
     res.json(users);
   } catch (error) {
-    res
-      .status(500)
-      .json({ error: `Failed to fetch users: ${process.env.DATABASE_URL}` });
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(error);
+    res.status(500).json({ error: `Failed to fetch users\n${msg}` });
   }
 });
 

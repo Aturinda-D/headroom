@@ -8,7 +8,187 @@ datasource db {
 }
 
 model User {
-  name   String @db.Char(1)
-  email  String @db.Char(1)
-  number Int    @id
+  id                String      @id @default(uuid())
+  email             String      @unique
+  name              String?
+  auth_provider     String      // 'google', 'apple', 'microsoft', 'email'
+  auth_provider_id  String?     // Provider's user ID
+  created_at        DateTime    @default(now())
+  updated_at        DateTime    @updatedAt
+  last_login        DateTime?
+  
+  // Settings (stored as JSON for flexibility)
+  settings          Json?       // { currency, theme, notifications, etc. }
+  
+  // Relationships
+  projects          Project[]
+  
+  @@index([email])
+}
+
+model Project {
+  id               String      @id @default(uuid())
+  user_id          String
+  name             String
+  is_primary       Boolean     @default(false)
+  tracking_period  String      @default("monthly") // 'daily', 'weekly', 'monthly'
+  currency         String      @default("USD")     // ISO 4217 currency code
+  created_at       DateTime    @default(now())
+  updated_at       DateTime    @updatedAt
+  last_accessed    DateTime    @default(now())
+  
+  // Relationships
+  user             User        @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  wallets          Wallet[]
+  categories       Category[]
+  transactions     Transaction[]
+  budgets          Budget[]
+  debts            Debt[]
+  
+  @@index([user_id])
+  @@index([user_id, is_primary])
+}
+
+model Wallet {
+  id                String      @id @default(uuid())
+  project_id        String
+  name              String
+  type              String?     // 'cash', 'bank', 'mobile_money', 'credit_card', 'custom'
+  icon              String?     // Icon identifier or emoji
+  color             String?     // Hex color code
+  initial_balance   Decimal     @default(0) @db.Decimal(15, 2)
+  current_balance   Decimal     @default(0) @db.Decimal(15, 2)
+  is_default        Boolean     @default(false)
+  is_archived       Boolean     @default(false)
+  created_at        DateTime    @default(now())
+  updated_at        DateTime    @updatedAt
+  
+  // Relationships
+  project               Project       @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  transactions_from     Transaction[] @relation("SourceWallet")
+  transactions_to       Transaction[] @relation("DestinationWallet")
+  
+  @@index([project_id])
+  @@index([project_id, is_default])
+  @@index([project_id, is_archived])
+}
+
+model Category {
+  id               String      @id @default(uuid())
+  project_id       String
+  name             String
+  type             String      @default("expense") // 'income', 'expense'
+  icon             String?     // Icon identifier or emoji
+  color            String?     // Hex color code
+  is_standard      Boolean     @default(false) // True for predefined categories
+  is_hidden        Boolean     @default(false)
+  display_order    Int?        // For custom ordering
+  created_at       DateTime    @default(now())
+  updated_at       DateTime    @updatedAt
+  
+  // Relationships
+  project          Project       @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  transactions     Transaction[]
+  budgets          Budget[]
+  
+  @@index([project_id])
+  @@index([project_id, type])
+  @@index([project_id, is_hidden])
+}
+
+model Transaction {
+  id                    String      @id @default(uuid())
+  project_id            String
+  type                  String      // 'income', 'expense', 'transfer', 'adjustment'
+  amount                Decimal     @db.Decimal(15, 2)
+  description           String?
+  date                  DateTime    @default(now())
+  
+  // Wallet relationships
+  source_wallet_id      String?     // For expenses and transfers (from)
+  destination_wallet_id String?     // For income and transfers (to)
+  
+  // Category (not applicable for transfers)
+  category_id           String?
+  
+  // Recurring transaction info
+  is_recurring          Boolean     @default(false)
+  recurring_pattern_id  String?     // Groups recurring transactions
+  recurring_frequency   String?     // 'daily', 'weekly', 'monthly', 'yearly'
+  recurring_start_date  DateTime?
+  recurring_end_date    DateTime?
+  recurring_needs_confirm Boolean   @default(false)
+  
+  // Transfer-specific
+  transfer_fee          Decimal?    @db.Decimal(15, 2)
+  
+  // Debt linkage
+  debt_id               String?
+  
+  // Sync metadata
+  is_synced             Boolean     @default(false)
+  local_timestamp       DateTime    @default(now())
+  synced_at             DateTime?
+  
+  created_at            DateTime    @default(now())
+  updated_at            DateTime    @updatedAt
+  
+  // Relationships
+  project               Project     @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  source_wallet         Wallet?     @relation("SourceWallet", fields: [source_wallet_id], references: [id], onDelete: SetNull)
+  destination_wallet    Wallet?     @relation("DestinationWallet", fields: [destination_wallet_id], references: [id], onDelete: SetNull)
+  category              Category?   @relation(fields: [category_id], references: [id], onDelete: SetNull)
+  debt                  Debt?       @relation(fields: [debt_id], references: [id], onDelete: SetNull)
+  
+  @@index([project_id])
+  @@index([project_id, date])
+  @@index([project_id, type])
+  @@index([project_id, category_id])
+  @@index([source_wallet_id])
+  @@index([destination_wallet_id])
+  @@index([recurring_pattern_id])
+  @@index([is_synced])
+}
+
+model Budget {
+  id               String      @id @default(uuid())
+  project_id       String
+  category_id      String?     // Null = overall project budget
+  limit_amount     Decimal     @db.Decimal(15, 2)
+  period           String      @default("monthly") // 'daily', 'weekly', 'monthly'
+  
+  // Alert thresholds
+  alert_at_80      Boolean     @default(true)
+  alert_at_100     Boolean     @default(true)
+  alert_at_120     Boolean     @default(false)
+  
+  created_at       DateTime    @default(now())
+  updated_at       DateTime    @updatedAt
+  
+  // Relationships
+  project          Project     @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  category         Category?   @relation(fields: [category_id], references: [id], onDelete: Cascade)
+  
+  @@unique([project_id, category_id, period])
+  @@index([project_id])
+}
+
+model Debt {
+  id                String        @id @default(uuid())
+  project_id        String
+  name              String
+  total_amount      Decimal       @db.Decimal(15, 2)
+  remaining_amount  Decimal       @db.Decimal(15, 2)
+  interest_rate     Decimal?      @db.Decimal(5, 2) // Annual percentage
+  minimum_payment   Decimal?      @db.Decimal(15, 2)
+  due_date          DateTime?     // Next payment due date
+  
+  created_at        DateTime      @default(now())
+  updated_at        DateTime      @updatedAt
+  
+  // Relationships
+  project           Project       @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  repayments        Transaction[] // Transactions linked to this debt
+  
+  @@index([project_id])
 }
