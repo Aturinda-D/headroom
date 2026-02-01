@@ -13,12 +13,19 @@ app.get("/", (req, res) => {
   res.json({ message: "Server is running" });
 });
 
-app.get("/health", (req, res) => {
-  res.json({
-    status: "OK",
-    message: "Server is healthy",
-    timeStamp: new Date().toISOString(),
-  });
+app.get("/health", async (req, res) => {
+  try {
+    const result = await prisma.$queryRaw`SELECT 1`;
+    res.json({
+      status: "OK",
+      message: "Server is healthy, database connection successful",
+      timeStamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(error);
+    res.status(500).json({ error: msg });
+  }
 });
 
 app.post("/users", async (req, res) => {
@@ -40,8 +47,7 @@ app.get("/users", async (req, res) => {
     res.json(users);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    console.error(error);
-    res.status(500).json({ error: `Failed to fetch users\n${msg}` });
+    res.status(500).json({ error: msg });
   }
 });
 
