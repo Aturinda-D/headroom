@@ -1,14 +1,29 @@
 import "dotenv/config";
 import express from "express";
-import cors from "cors";
+import {
+  corsMiddleware,
+  helmetMiddleware,
+  apiRateLimiter,
+} from "./middleware/security.js";
+import { errorHandler } from "./middleware/errorHandler.js";
 import { prisma } from "./utils/prisma.js";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
-app.use(express.json());
+// Trust proxy for correct client IP detection behind proxies/load balancers
+if (process.env.TRUST_PROXY === "true") {
+  app.set("trust proxy", true);
+}
 
+// Security Middlewares
+app.use(helmetMiddleware);
+app.use(corsMiddleware);
+app.use(apiRateLimiter);
+app.use(express.json({ limit: "10kb" })); // Limit JSON body to 10kb
+app.use(express.urlencoded({ extended: true, limit: "10kb" })); // Limit URL-encoded body to 10kb
+
+// Basic Routes
 app.get("/", (req, res) => {
   res.json({ message: "Server is running" });
 });
@@ -51,6 +66,10 @@ app.get("/users", async (req, res) => {
   }
 });
 
+// Error handling middleware (register after routes)
+app.use(errorHandler);
+
+// Start Server
 app.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
 });
