@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "generate": "prisma generate",
-    "build": "npm run generate && tsc",
-    "start": "node dist/index.js",
+    "build": "npm run generate && esbuild src/index.ts --bundle --platform=node --outdir=dist --format=esm --external:@prisma/client",
+    "start": "tsx src/index.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -31,6 +31,7 @@
     "@types/helmet": "^0.0.48",
     "@types/node": "^25.0.10",
     "@types/pg": "^8.16.0",
+    "esbuild": "^0.27.3",
     "prisma": "^7.3.0",
     "ts-node-dev": "^2.0.0",
     "tsx": "^4.21.0",
